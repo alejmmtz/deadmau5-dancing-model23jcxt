@@ -1,51 +1,282 @@
-<!doctype html>
-<html>
-    <head>
-        <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
-        <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-        <script src="https://raw.githack.com/donmccurdy/aframe-extras/master/dist/aframe-extras.loaders.min.js"></script>
-        <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-detector.js"></script>
-        <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-handler.js"></script>
-    </head>
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AR with Autoplay Audio</title>
 
-    <body style="margin: 0; overflow: hidden;">
-        <a-scene
-            vr-mode-ui="enabled: false;"
-            loading-screen="enabled: false;"
-            renderer="logarithmicDepthBuffer: true;"
-            arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
-            id="scene"
-            embedded
-            gesture-detector
-        >
-            <a-assets>
-                <a-asset-item
-                    id="animated-asset"
-                    src="assets/asset.glb"
-                ></a-asset-item>
-            </a-assets>
+    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://raw.githack.com/donmccurdy/aframe-extras/master/dist/aframe-extras.loaders.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-detector.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-handler.js"></script>
 
-            <a-marker
-                id="animated-marker"
-                type="pattern"
-                preset="custom"
-                url="assets/marker.patt"
-                raycaster="objects: .clickable"
-                emitevents="true"
-                cursor="fuse: false; rayOrigin: mouse;"
-                id="markerA"
-            >
-                <a-entity
-                    id="bowser-model"
-                    scale="0.20709316438646314 0.20709316438646314 0.20709316438646314"
-                    animation-mixer="loop: repeat"
-                    gltf-model="#animated-asset"
-                    class="clickable"
-                    gesture-handler
-                ></a-entity>
-            </a-marker>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font-family: Inter, system-ui;
+        -webkit-font-smoothing: antialiased;
+      }
+      /* overlay grande para mobile / cuando autoplay está bloqueado */
+      #overlayPlay {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 9999;
+        display: none;
+        pointer-events: auto;
+      }
+      #overlayPlay button {
+        font-weight: 700;
+        font-size: 18px;
+        padding: 14px 22px;
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(90deg, #e53935, #b71c1c);
+        color: white;
+        box-shadow: 0 12px 30px rgba(2, 6, 23, 0.6);
+        cursor: pointer;
+      }
+      /* boton mute flotante (esquina superior derecha) */
+      #muteToggle {
+        position: fixed;
+        right: 12px;
+        top: 12px;
+        z-index: 9999;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        border: none;
+        background: rgba(0, 0, 0, 0.35);
+        display: inline-grid;
+        place-items: center;
+        cursor: pointer;
+        color: white;
+      }
+      #muteToggle svg {
+        width: 18px;
+        height: 18px;
+      }
+      /* en pantallas muy pequeñas mostramos overlay por defecto */
+      @media (max-width: 520px) {
+        #overlayPlay {
+          display: block;
+        }
+      }
+    </style>
+  </head>
 
-            <a-entity camera></a-entity>
-        </a-scene>
-    </body>
+  <body style="margin: 0; overflow: hidden">
+    <!-- audio oculto pero controlable -->
+    <audio id="bgAudio" preload="auto" loop playsinline>
+      <source src="assets/petting-zoo.mp3" type="audio/mpeg" />
+      Tu navegador no soporta audio en línea.
+    </audio>
+
+    <!-- overlay de reproducción (aparece si autoplay bloqueado) -->
+    <div id="overlayPlay" aria-hidden="true">
+      <button
+        id="overlayPlayBtn"
+        aria-label="Reproducir audio y activar escena"
+      >
+        Reproducir
+      </button>
+    </div>
+
+    <!-- boton mute flotante -->
+    <button
+      id="muteToggle"
+      aria-pressed="false"
+      title="Silenciar / activar sonido"
+      aria-label="activar sonido"
+    >
+      <svg
+        id="muteSvg"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <!-- icono inicial: sonido (si se cambia con JS) -->
+        <path
+          d="M5 9v6h4l5 4V5L9 9H5z"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          d="M19 9a7 7 0 0 1 0 6"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
+
+    <!-- escena A-Frame / AR.js -->
+    <a-scene
+      vr-mode-ui="enabled: false;"
+      loading-screen="enabled: false;"
+      renderer="logarithmicDepthBuffer: true;"
+      arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
+      id="scene"
+      embedded
+      gesture-detector
+    >
+      <a-assets>
+        <a-asset-item id="animated-asset" src="assets/asset.glb"></a-asset-item>
+      </a-assets>
+
+      <a-marker
+        id="animated-marker"
+        type="pattern"
+        preset="custom"
+        url="assets/marker.patt"
+        raycaster="objects: .clickable"
+        emitevents="true"
+        cursor="fuse: false; rayOrigin: mouse;"
+        id="markerA"
+      >
+        <a-entity
+          id="bowser-model"
+          scale="0.20709316438646314 0.20709316438646314 0.20709316438646314"
+          animation-mixer="loop: repeat"
+          gltf-model="#animated-asset"
+          class="clickable"
+          gesture-handler
+        ></a-entity>
+      </a-marker>
+
+      <a-entity camera></a-entity>
+    </a-scene>
+
+    <script>
+      // referencias DOM
+      const bgAudio = document.getElementById("bgAudio");
+      const muteToggle = document.getElementById("muteToggle");
+      const overlay = document.getElementById("overlayPlay");
+      const overlayBtn = document.getElementById("overlayPlayBtn");
+
+      // mejoras iOS
+      try {
+        bgAudio.setAttribute("playsinline", "");
+        bgAudio.setAttribute("webkit-playsinline", "");
+        bgAudio.webkitPlaysInline = true;
+      } catch (e) {}
+
+      // actualiza icono de mute en el botón
+      function updateMuteButton(isMuted) {
+        muteToggle.setAttribute("aria-pressed", String(!isMuted));
+        const svg = document.getElementById("muteSvg");
+        if (isMuted) {
+          svg.innerHTML =
+            '<path d="M5 9v6h4l5 4V5L9 9H5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 7l4 4m0-4l-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
+        } else {
+          svg.innerHTML =
+            '<path d="M5 9v6h4l5 4V5L9 9H5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 9a7 7 0 0 1 0 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
+        }
+      }
+
+      function showOverlay(visible) {
+        overlay.style.display = visible ? "block" : "none";
+        overlay.setAttribute("aria-hidden", visible ? "false" : "true");
+      }
+
+      // intentamos autoplay con lógica robusta:
+      async function tryAutoplay() {
+        if (!bgAudio) return false;
+        try {
+          bgAudio.muted = false; // intentamos sin mute primero
+          await bgAudio.play();
+          onAudioPlaySuccess();
+          return true;
+        } catch (err) {
+          // intento con muted (algunos navegadores permiten play muted)
+          try {
+            bgAudio.muted = true;
+            await bgAudio.play();
+            // algunos permiten desmutear luego
+            setTimeout(() => {
+              try {
+                bgAudio.muted = false;
+                updateMuteButton(bgAudio.muted);
+              } catch (e) {}
+            }, 250);
+            onAudioPlaySuccess();
+            return true;
+          } catch (err2) {
+            // autoplay bloqueado completamente -> mostrar overlay para que el usuario interactúe
+            showOverlay(true);
+            return false;
+          }
+        }
+      }
+
+      function onAudioPlaySuccess() {
+        showOverlay(false);
+        updateMuteButton(bgAudio.muted);
+      }
+
+      // inicializar en 'load'
+      window.addEventListener("load", () => {
+        // restaurar preferencia previa (mute)
+        try {
+          const saved = localStorage.getItem("bgAudioMuted");
+          if (saved !== null) bgAudio.muted = saved === "true";
+        } catch (e) {}
+        tryAutoplay();
+      });
+
+      // si el usuario interactúa (click/touch) intentamos otra vez
+      ["touchstart", "click"].forEach((ev) => {
+        const one = async function () {
+          await tryAutoplay();
+          window.removeEventListener(ev, one);
+        };
+        window.addEventListener(ev, one, { passive: true });
+      });
+
+      // overlay (botón grande) -> reproduce y oculta overlay
+      overlayBtn &&
+        overlayBtn.addEventListener("click", async () => {
+          try {
+            await bgAudio.play();
+            bgAudio.muted = false;
+            showOverlay(false);
+            updateMuteButton(false);
+          } catch (e) {
+            console.warn("Error reproduciendo audio desde overlay:", e);
+          }
+        });
+
+      // toggle mute
+      muteToggle.addEventListener("click", async () => {
+        // si no ha arrancado reproducción, intentar arrancarla (algunos navegadores requieren interacción)
+        if (bgAudio.paused) {
+          try {
+            await bgAudio.play();
+          } catch (e) {}
+        }
+        bgAudio.muted = !bgAudio.muted;
+        updateMuteButton(bgAudio.muted);
+      });
+
+      // persistir preferencia
+      bgAudio.addEventListener("volumechange", () => {
+        try {
+          localStorage.setItem("bgAudioMuted", String(bgAudio.muted));
+        } catch (e) {}
+      });
+
+      // UX: si pantalla pequeña, fuerza mostrar overlay (si autoplay falla habrá overlay visible)
+      function isSmall() {
+        return window.matchMedia("(max-width:520px)").matches;
+      }
+      if (isSmall()) showOverlay(true);
+    </script>
+  </body>
 </html>
